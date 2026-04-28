@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from nhl_api import get_standings, get_standings_by_season
+from nhl_api import get_standings, get_standings_by_season, get_scores_by_date, get_boxscore, get_game_details
 
 
 st.set_page_config(page_title="NHL Analytics Dashboard", layout = "wide")
@@ -11,8 +11,8 @@ page = st.sidebar.radio("Navigate",
      "Team Profile",
      "League Overview",
      "Team Comparison",
-     "Momentum Scores"])
-
+     "Momentum Scores",
+     "Live Games"])
 df = get_standings()
 st.title("NHL Analytics Dashboard")
 if page == "Team Profile":
@@ -150,3 +150,79 @@ if page == "Momentum Scores":
         Momentum Score combines win percentage, goal differential, and offensive production.
         It is not a betting model, but a simple performance index for comparing teams.
         """)
+if page == "Live Games":
+    st.title("Live Game Tracker")
+
+    if st.button("Refresh Games"):
+        st.cache_data.clear()
+        st.rerun()
+
+    selected_date = st.date_input("Choose a date")
+
+    games_df = get_scores_by_date(selected_date.isoformat())
+
+    if games_df.empty:
+        st.info("No NHL games found for this date.")
+    else:
+        for _, game in games_df.iterrows():
+            st.subheader(f"{game['Away Team']} vs {game['Home Team']}")
+
+            col1, col2, col3 = st.columns(3)
+
+            col1.metric(game["Away Team"], int(game["Away Score"]))
+            col2.metric("Status", game["Status"])
+            col3.metric(game["Home Team"], int(game["Home Score"]))
+
+            st.caption(f"Venue: {game['Venue']}")
+
+            with st.expander("View detailed game stats"):
+                try:
+                    boxscore = get_boxscore(game["Game ID"])
+                    details = get_game_details(game["Game ID"])
+
+                    away_team = boxscore["awayTeam"]
+                    home_team = boxscore["homeTeam"]
+
+                    stats_df = pd.DataFrame({
+                        "Stat": [
+                            "Score",
+                            "Shots",
+                            "Power Play Goals",
+                            "Power Play Opportunities",
+                            "Faceoff Win %",
+                            "Penalty Minutes"
+                        ],
+                        away_team["abbrev"]: [
+                            away_team.get("score", 0),
+                            away_team.get("sog", 0),
+                            away_team.get("powerPlayGoals", "N/A"),
+                            away_team.get("powerPlayOpportunities", "N/A"),
+                            away_team.get("faceoffWinningPctg", "N/A"),
+                            away_team.get("pim", "N/A")
+                        ],
+                        home_team["abbrev"]: [
+                            home_team.get("score", 0),
+                            home_team.get("sog", 0),
+                            home_team.get("powerPlayGoals", "N/A"),
+                            home_team.get("powerPlayOpportunities", "N/A"),
+                            home_team.get("faceoffWinningPctg", "N/A"),
+                            home_team.get("pim", "N/A")
+                        ]
+                    })
+
+                    st.dataframe(stats_df, hide_index=True)
+
+                    st.subheader("Game Info")
+
+                    period = details.get("periodDescriptor", {}).get("number", "N/A")
+                    time_remaining = details.get("clock", {}).get("timeRemaining", "N/A")
+
+                    col_a, col_b = st.columns(2)
+                    col_a.metric("Period", period)
+                    col_b.metric("Time Remaining", time_remaining)
+
+                except Exception as e:
+                    st.warning("Detailed stats are not available for this game yet.")
+                    st.caption(str(e))
+
+            st.divider()
