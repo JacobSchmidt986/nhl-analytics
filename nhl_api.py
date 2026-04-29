@@ -99,7 +99,7 @@ def get_boxscore(game_id):
     return data
 
 def get_game_details(game_id):
-    url = f"{BASE_URL}/gamecenter/{game_id}/play_by_play"
+    url = f"{BASE_URL}/gamecenter/{game_id}/play-by-play"
     response = requests.get(url)
     response.raise_for_status()
 
